@@ -2,6 +2,7 @@ const express  = require('express')
 const { body } = require('express-validator')
 const { createRoom, joinRoom, getMyRooms, getRoom, getTasks, createTask, updateTask, deleteTask } = require('../controllers/room.controller')
 const { getFiles, uploadFile, togglePin, deleteFile } = require('../controllers/file.controller')
+const { getQuizzes, createQuiz, submitQuiz, deleteQuiz } = require('../controllers/quiz.controller')
 const { protect }  = require('../middleware/auth.middleware')
 const { upload }   = require('../config/cloudinary')
 
@@ -35,5 +36,11 @@ router.get   ('/:id/files',              getFiles)
 router.post  ('/:id/files',              upload.single('file'), uploadFile)
 router.patch ('/:id/files/:fileId/pin',  togglePin)
 router.delete('/:id/files/:fileId',      deleteFile)
+
+/* ── Quiz routes ── */
+router.get   ('/:id/quizzes',                  getQuizzes)
+router.post  ('/:id/quizzes',                  createQuiz)
+router.post  ('/:id/quizzes/:quizId/submit',   submitQuiz)
+router.delete('/:id/quizzes/:quizId',          deleteQuiz)
 
 module.exports = router

@@ -1,4 +1,5 @@
-require('dotenv').config()
+const path = require('path')
+require('dotenv').config({ path: path.resolve(__dirname, '.env') })
 
 const express    = require('express')
 const http       = require('http')
@@ -8,29 +9,40 @@ const jwt        = require('jsonwebtoken')
 const connectDB  = require('./config/db')
 const authRoutes = require('./routes/auth.routes')
 const roomRoutes = require('./routes/room.routes')
-const Room       = require('./models/room.model')
-const User       = require('./models/auth.model')
+const Room    = require('./models/room.model')
+const Message = require('./models/message.model')
+const User    = require('./models/auth.model')
 
 const app    = express()
 const server = http.createServer(app)
 const PORT   = process.env.PORT || 5000
+const normalizeUrl = (url = '') => url.replace(/\/+$/, '')
+const CLIENT_URL = normalizeUrl(process.env.CLIENT_URL || 'http://localhost:5173')
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    const normalizedOrigin = normalizeUrl(origin || '')
+    if (!origin || normalizedOrigin === CLIENT_URL) return callback(null, true)
+    return callback(new Error(`CORS origin denied: ${origin}`), false)
+  },
+  credentials: true,
+}
 
 /* ── Socket.io ── */
 const io = new Server(server, {
   cors: {
-    origin:      process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: CLIENT_URL,
     credentials: true,
   },
 })
+
+console.log(`CORS allowed origin: ${CLIENT_URL}`)
 
 /* ── Connect to MongoDB ── */
 connectDB()
 
 /* ── Middleware ── */
-app.use(cors({
-  origin:      process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}))
+app.use(cors(corsOptions))
 app.use(express.json())
 
 /* ── REST Routes ── */
@@ -86,14 +98,19 @@ io.on('connection', async (socket) => {
     socket.currentRoomId = roomId
 
     // Send last 50 messages to the joining user
-    const messages = room.messages.slice(-50).map(m => ({
+    const messages = await Message.find({ roomId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean()
+    messages.reverse() // oldest first
+
+    socket.emit('message_history', messages.map(m => ({
       _id:    m._id,
       sender: m.sender,
       text:   m.text,
       code:   m.code,
-      sentAt: m.sentAt,
-    }))
-    socket.emit('message_history', messages)
+      sentAt: m.createdAt,
+    })))
 
     // Notify others
     socket.to(roomId).emit('user_joined', {
@@ -112,20 +129,19 @@ io.on('connection', async (socket) => {
     if (!isMember) return
 
     // Persist to DB
-    room.messages.push({
+    const saved = await Message.create({
+      roomId,
       sender: { _id: userId, name: socket.user.name },
       text:   text?.trim() || '',
       code:   code?.trim() || null,
     })
-    await room.save()
 
-    const saved = room.messages[room.messages.length - 1]
     const payload = {
       _id:    saved._id,
       sender: saved.sender,
       text:   saved.text,
       code:   saved.code,
-      sentAt: saved.sentAt,
+      sentAt: saved.createdAt,
     }
 
     // Broadcast to everyone in the room (including sender)
