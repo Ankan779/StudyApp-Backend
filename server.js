@@ -17,12 +17,16 @@ const app    = express()
 const server = http.createServer(app)
 const PORT   = process.env.PORT || 5000
 const normalizeUrl = (url = '') => url.replace(/\/+$/, '')
-const CLIENT_URL = normalizeUrl(process.env.CLIENT_URL || 'http://localhost:5173')
+const DEPLOYED_CLIENT_URL = 'https://studyapp-frontend-7rxn.onrender.com'
+const CLIENT_URL = normalizeUrl(process.env.CLIENT_URL || DEPLOYED_CLIENT_URL)
+const allowedOrigins = [CLIENT_URL, 'http://localhost:5173', DEPLOYED_CLIENT_URL]
+  .filter(Boolean)
+  .map(normalizeUrl)
 
 const corsOptions = {
   origin: (origin, callback) => {
     const normalizedOrigin = normalizeUrl(origin || '')
-    if (!origin || normalizedOrigin === CLIENT_URL) return callback(null, true)
+    if (!origin || allowedOrigins.includes(normalizedOrigin)) return callback(null, true)
     return callback(new Error(`CORS origin denied: ${origin}`), false)
   },
   credentials: true,
